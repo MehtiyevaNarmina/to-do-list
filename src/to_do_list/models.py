@@ -1,6 +1,6 @@
 from typing import Optional, List
 from enum import Enum
-from sqlmodel import SQLModel, Field, Relationship, create_engine
+from sqlmodel import SQLModel, Field, Relationship
 from pydantic import BaseModel
 
 # --- User Models ---
@@ -20,6 +20,10 @@ class User(UserBase, table=True):
 # Pydantic models for user creation
 class UserCreate(UserBase):
     password: str = Field(min_length=6)
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
 
 # Pydantic model for login
 class UserLogin(BaseModel):
