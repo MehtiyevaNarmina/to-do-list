@@ -41,7 +41,7 @@ A secure and modular backend RESTful API for managing personal to-do tasks. Buil
 - **Database** – PostgreSQL
 - **Dependency and environment management** – Poetry
 - **Authentication** – JWT
-- **Testing** – Pytest, TestClient (for functional tests), unittest.mock (for unit tests)
+- **Testing** – Pytest, TestClient (for functional tests), python-jose (for unit tests)
 - **Containerization** - Docker, Docker Compose
 ---
 
