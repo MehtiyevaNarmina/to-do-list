@@ -1,0 +1,50 @@
+services:
+  db_todo:
+    image: postgres:16-alpine
+    restart: always
+    env_file:
+      - src/to_do_list/.env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    ports:
+      - "5432:5432"
+
+  db_test:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=todo_user
+      - POSTGRES_PASSWORD=todo_pass
+      - POSTGRES_DB=tododb_test
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data/
+
+  backend:
+    build: .
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+    env_file:
+      - src/to_do_list/.env
+    depends_on:
+      db_todo:
+        condition: service_started
+
+  tests:
+    build: .
+    command: ["pytest", "-v"]
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+    environment:
+      - DATABASE_URL=postgresql://todo_user:todo_pass@db_test:5432/tododb_test
+      - JWT_SECRET_KEY=SomeRandomSecretKeyveryLongAndSecure1234567890
+    depends_on:
+      db_test:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  postgres_test_data: 

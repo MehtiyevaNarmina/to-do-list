@@ -1,24 +1,31 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Query, Body
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm # Добавил OAuth2PasswordBearer
 from sqlmodel import Session, select, desc
 from typing import Annotated, Optional, List
 from contextlib import asynccontextmanager
 from datetime import timedelta
 
-from database import create_tables, get_session
-from models import (
-    User, UserCreate, UserRead, UserLogin,
-    Task, TaskCreate, TaskUpdate, TaskRead, TaskStatus
+from src.to_do_list.create_db import create_tables, get_session, get_db_engine
+from src.to_do_list.models import (
+    User, UserCreate, UserRead,
+    Task, TaskCreate, TaskUpdate, TaskRead, TaskStatus 
 )
-from auth import get_password_hash, verify_password, create_access_token, get_current_user
-from settings import settings
+from src.to_do_list.auth import get_password_hash, verify_password, create_access_token, get_current_user 
+from src.to_do_list.settings import settings
+
+_app_engine = None
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print('Creating Tables...')
-    create_tables()
-    print("Tables Created.")
+    print('Application startup...')
+    global _app_engine
+    _app_engine = get_db_engine() 
+    create_tables(engine_instance=_app_engine) 
+    print("Application startup complete. Tables created.")
     yield
+    print("Application shutdown.")
 
 app: FastAPI = FastAPI(
     lifespan=lifespan,
@@ -27,13 +34,10 @@ app: FastAPI = FastAPI(
     version='1.0.0'
 )
 
-# --- Authentication Endpoints ---
 
-@app.post("/register/", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+@app.post("/register/", response_model=UserRead, status_code=status.HTTP_201_CREATED, tags=["Authentication"])
 async def register_user(user_create: UserCreate, session: Annotated[Session, Depends(get_session)]):
-    """
-    Register a new user.
-    """
+   
     existing_user = session.exec(select(User).where(User.username == user_create.username)).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Username already registered")
@@ -55,9 +59,6 @@ async def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()], 
     session: Annotated[Session, Depends(get_session)]
 ):
-    """
-    Logs in a user and returns a JWT access token.
-    """
     user = session.exec(select(User).where(User.username == form_data.username)).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -71,17 +72,13 @@ async def login_for_access_token(
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-# --- Protected Task Endpoints ---
 
 @app.post('/tasks/', response_model=TaskRead, status_code=status.HTTP_201_CREATED, tags=["Tasks"])
 async def create_task_for_user(
     task: TaskCreate, 
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user)], 
     session: Annotated[Session, Depends(get_session)]
 ):
-    """
-    Creates a new task for the authenticated user.
-    """
     db_task = Task.model_validate(task, update={"user_id": current_user.id})
     session.add(db_task)
     session.commit()
@@ -90,7 +87,7 @@ async def create_task_for_user(
 
 @app.get('/tasks/', response_model=List[TaskRead], tags=["Tasks"])
 async def get_my_tasks(
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user)], 
     session: Annotated[Session, Depends(get_session)],
     offset: int = 0,
     limit: int = Query(default=10, le=100),
@@ -98,9 +95,6 @@ async def get_my_tasks(
     sort_order: Optional[str] = Query("asc", description="Sort order: 'asc' or 'desc'"),
     status_filter: Optional[TaskStatus] = Query(None, description="Filter tasks by status")
 ):
-    """
-    Retrieves all tasks for the authenticated user with optional pagination, sorting, and filtering.
-    """
     query = select(Task).where(Task.user_id == current_user.id)
     
     if status_filter:
@@ -117,6 +111,7 @@ async def get_my_tasks(
 
     tasks = session.exec(query).all()
     if not tasks:
+       
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No tasks found for this user.")
     
     return tasks
@@ -127,9 +122,7 @@ async def get_single_task(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_session)]
 ):
-    """
-    Retrieves a single task for the authenticated user by its ID.
-    """
+    
     task = session.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found.")
@@ -143,12 +136,10 @@ async def get_single_task(
 async def update_task(
     task_id: int,
     task_update: TaskUpdate,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user)], 
     session: Annotated[Session, Depends(get_session)]
 ):
-    """
-    Updates an existing task. Only the owner can update.
-    """
+   
     db_task = session.get(Task, task_id)
     if not db_task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found.")
@@ -168,12 +159,10 @@ async def update_task(
 @app.delete('/tasks/{task_id}', status_code=status.HTTP_204_NO_CONTENT, tags=["Tasks"])
 async def delete_task(
     task_id: int,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user)], 
     session: Annotated[Session, Depends(get_session)]
 ):
-    """
-    Deletes a task. Only the owner can delete.
-    """
+    
     task = session.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found.")
@@ -184,16 +173,13 @@ async def delete_task(
     session.delete(task)
     session.commit()
 
-# New Endpoint for marking a task as completed (Requirement 4)
 @app.put('/tasks/{task_id}/complete', response_model=TaskRead, tags=["Tasks"])
 async def complete_task(
     task_id: int,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_session)]
 ):
-    """
-    Marks a task as 'Completed'.
-    """
+    
     db_task = session.get(Task, task_id)
     if not db_task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found.")
@@ -201,7 +187,7 @@ async def complete_task(
     if db_task.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this task.")
 
-    db_task.status = TaskStatus.completed
+    db_task.status = TaskStatus.completed 
     session.add(db_task)
     session.commit()
     session.refresh(db_task)

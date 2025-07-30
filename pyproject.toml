@@ -16,12 +16,17 @@ dependencies = [
     "python-dotenv (>=1.1.1,<2.0.0)",
     "psycopg[binary] (>=3.2.9,<4.0.0)",
     "python-jose (>=3.5.0,<4.0.0)",
-    "passlib[bcrypt] (>=1.7.4,<2.0.0)"
+    "passlib[bcrypt] (>=1.7.4,<2.0.0)",
+    "python-multipart (>=0.0.9,<1.0.0)"
 ]
 
 [tool.poetry]
 packages = [{include = "to_do_list", from = "src"}]
 
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.1"
+httpx = "^0.28.1"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
